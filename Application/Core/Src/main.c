@@ -180,7 +180,7 @@ int main(void)
 	sysInfo.frequencyConfig = 433;
 	sysInfo.sfConfig = SF_7;
 	sysInfo.autoStatusSeconds = 60;
-	MotorConfig_Load();
+	CmdHandler_MotorConfig_Load();
     sysInfo.powerState=MOTOR_POWER_OFF;
     MotorHistory_Init();
 	sysInfo.netId = sysInfo.netIdConfig;
@@ -874,7 +874,7 @@ void StartLoraSendTask(void *argument)
 			LoRa_startReceiving(&sLoRaCtrl);
             osMutexRelease(motorRadioMutex);
             MotorHistory_TxFinished(&txPackage);
-			if (txPackage.code == CMD_GET_STATUS) Motor_StatusSent(sent);
+			if (txPackage.code == CMD_GET_STATUS) CmdHandler_Motor_StatusSent(sent);
 			osDelay(pdMS_TO_TICKS(200));
 		}
   }
@@ -911,7 +911,7 @@ void StartLoraReceiveTask(void *argument)
 void PeriodicSendStatusTimerCallback(void *argument)
 {
   /* USER CODE BEGIN PeriodicSendStatusTimerCallback */
-	Motor_AutoStatusTick(xTaskGetTickCount());
+	CmdHandler_Motor_AutoStatusTick(xTaskGetTickCount());
   /* USER CODE END PeriodicSendStatusTimerCallback */
 }
 

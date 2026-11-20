@@ -13,6 +13,18 @@ extern SystemInfo_t sysInfo;
 extern FactoryInfo_t factoryInfo;
 extern RTC_HandleTypeDef hrtc;
 
+/* Private handlers are dispatched only through cmdTable. */
+static void handleHistory(LoraPackage_t packet);
+static void handleSetConfig(LoraPackage_t packet);
+static void handleGetStatus(LoraPackage_t packet);
+static void handleControlPower(LoraPackage_t packet);
+static void handleSetSchedule(LoraPackage_t packet);
+static void handleSyncTime(LoraPackage_t packet);
+static void handleGetFactoryInfo(LoraPackage_t packet);
+static void handleConfigConnection(LoraPackage_t packet);
+static void handleAlarmMessage(LoraPackage_t packet);
+static uint8_t syncStatusTime(uint32_t timestamp);
+
 static uint8_t sendResponse(LoraPackage_t *packet, void *payload, uint8_t size)
 {
     packet->type = LORA_PACKAGE_TYPE_RESPONSE;
@@ -35,7 +47,7 @@ static uint8_t configValid(const uint32_t *record)
         (record[2] >> 16) >= SF_7 && (record[2] >> 16) <= SF_12;
 }
 
-void MotorConfig_Load(void)
+void CmdHandler_MotorConfig_Load(void)
 {
     for (const uint32_t *p = (const uint32_t *)MOTOR_CONFIG_ADDRESS;
          p + 5 <= (const uint32_t *)(MOTOR_CONFIG_ADDRESS + 1024); p += 5) {
@@ -50,7 +62,7 @@ void MotorConfig_Load(void)
     }
 }
 
-uint8_t MotorConfig_Save(void)
+static uint8_t saveMotorConfig(void)
 {
     uint32_t record[5], error;
     const uint32_t *last = NULL;
@@ -92,8 +104,9 @@ uint8_t MotorConfig_Save(void)
     return !memcmp(slot, record, sizeof(record));
 }
 
+/* Command dispatch table. Keep this order aligned with implementations below. */
 const CmdMapping_t cmdTable[] = {
-    {CMD_HISTORY, MotorHistory_HandleAck},
+    {CMD_HISTORY, handleHistory},
     {CMD_SET_CONFIG, handleSetConfig},
     {CMD_GET_STATUS, handleGetStatus},
     {CMD_CONTROL_POWER, handleControlPower},
@@ -107,7 +120,7 @@ const CmdMapping_t cmdTable[] = {
 
 static volatile uint8_t statusQueued;
 
-__attribute__((noinline)) uint8_t Motor_QueueStatus(LoraPackage_t *request)
+__attribute__((noinline)) static uint8_t queueStatus(LoraPackage_t *request)
 {
     PayloadResponseGetStatus_t payload;
     LoraPackage_t packet;
@@ -134,22 +147,30 @@ __attribute__((noinline)) uint8_t Motor_QueueStatus(LoraPackage_t *request)
     return queued;
 }
 
-void Motor_StatusSent(uint8_t success)
+void CmdHandler_Motor_StatusSent(uint8_t success)
 {
     uint32_t now = xTaskGetTickCount();
     if (success) sysInfo.lastStatusTxTick = now;
     statusQueued = 0;
 }
 
-void Motor_AutoStatusTick(uint32_t now)
+void CmdHandler_Motor_AutoStatusTick(uint32_t now)
 {
     if (sysInfo.sysState == SYSSTATE_RUNNING && sysInfo.netId && sysInfo.nodeId &&
         sysInfo.autoStatusSeconds && !statusQueued &&
         (uint32_t)(now - sysInfo.lastStatusTxTick) >= (uint32_t)sysInfo.autoStatusSeconds * configTICK_RATE_HZ) {
-        Motor_QueueStatus(NULL);
+        queueStatus(NULL);
     }
 }
-void handleSetConfig(LoraPackage_t packet)
+
+/* Command handler implementations, ordered as cmdTable. */
+static void handleHistory(LoraPackage_t packet)
+{
+    if (packet.code != CMD_HISTORY) return;
+    MotorHistory_HandleAck(packet);
+}
+
+static void handleSetConfig(LoraPackage_t packet)
 {
     PayloadRequestSetConfig_t config;
     PayloadCommonResponse_t reply;
@@ -172,7 +193,7 @@ void handleSetConfig(LoraPackage_t packet)
         sysInfo.alarmThresholdCentiAmp = config.alarmThresholdCentiAmp;
         sysInfo.alarmDelaySeconds = config.alarmDelaySeconds;
         sysInfo.autoStatusSeconds = config.autoStatusSeconds;
-        reply.result = MotorConfig_Save();
+        reply.result = saveMotorConfig();
         if (!reply.result) {
             sysInfo.alarmThresholdCentiAmp = oldThreshold;
             sysInfo.alarmDelaySeconds = oldDelay;
@@ -195,7 +216,7 @@ __attribute__((noinline)) static void syncTimeIfDifferent(uint32_t time)
     }
 }
 
-void handleGetStatus(LoraPackage_t fwPackage) {
+static void handleGetStatus(LoraPackage_t fwPackage) {
 /* Status payload is shared by solicited replies and autonomous reports. */
 	if (fwPackage.type != LORA_PACKAGE_TYPE_REQUEST || (fwPackage.netId != sysInfo.netId) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_BROADCAST) ||
@@ -208,14 +229,14 @@ void handleGetStatus(LoraPackage_t fwPackage) {
 	}
 	
     if (payloadRequest.moduleIndex != 0) return;
-    Motor_SyncStatusTime(payloadRequest.syncTime);
+    syncStatusTime(payloadRequest.syncTime);
 	sysInfo.lastCommTick = xTaskGetTickCount();
 	
 	
-	Motor_QueueStatus(&fwPackage);
+	queueStatus(&fwPackage);
 }
 
-uint8_t Motor_SyncStatusTime(uint32_t timestamp)
+static uint8_t syncStatusTime(uint32_t timestamp)
 {
     /* Ignore an unset remote RTC. Keep status queries backwards compatible. */
     if (timestamp<1704067200u || timestamp>4102444799u) return FALSE;
@@ -248,7 +269,7 @@ uint8_t Motor_SyncStatusTime(uint32_t timestamp)
     return TRUE;
 }
 
-void handleControlPower(LoraPackage_t fwPackage) {
+static void handleControlPower(LoraPackage_t fwPackage) {
 	if ((fwPackage.netId != sysInfo.netId) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_BROADCAST) ||
 			(fwPackage.code != CMD_CONTROL_POWER)) {
@@ -277,7 +298,7 @@ void handleControlPower(LoraPackage_t fwPackage) {
 }
 
 
-void handleSetSchedule(LoraPackage_t fwPackage) {
+static void handleSetSchedule(LoraPackage_t fwPackage) {
 	if ((fwPackage.netId != sysInfo.netId) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_BROADCAST) ||
 			(fwPackage.code != CMD_SET_SCHEDULE)) {
@@ -312,7 +333,7 @@ void handleSetSchedule(LoraPackage_t fwPackage) {
 
 }
 
-void handleSyncTime(LoraPackage_t fwPackage) {
+static void handleSyncTime(LoraPackage_t fwPackage) {
 	if ((fwPackage.netId != sysInfo.netId) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_BROADCAST) ||
 			(fwPackage.code != CMD_SYNC_TIME)) {
@@ -338,7 +359,7 @@ void handleSyncTime(LoraPackage_t fwPackage) {
 	sendResponse(&fwPackage, &payload, sizeof(payload));
 
 }
-void handleGetFactoryInfo(LoraPackage_t fwPackage){
+static void handleGetFactoryInfo(LoraPackage_t fwPackage){
 	if ((fwPackage.netId != sysInfo.netId && fwPackage.netId != LORA_NET_ID_CONFIG) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_CONFIG) ||
 			(fwPackage.code != CMD_GET_FACTORY_INFO)) {
@@ -358,7 +379,7 @@ void handleGetFactoryInfo(LoraPackage_t fwPackage){
 	sendResponse(&fwPackage, &payload, sizeof(payload));
 
 }
-void handleConfigConnection(LoraPackage_t fwPackage) {
+static void handleConfigConnection(LoraPackage_t fwPackage) {
 	if ((fwPackage.netId != sysInfo.netId && fwPackage.netId != LORA_NET_ID_CONFIG) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_CONFIG) ||
 			(fwPackage.code != CMD_CONFIG_CONNECTION)) {
@@ -378,7 +399,7 @@ void handleConfigConnection(LoraPackage_t fwPackage) {
 			sysInfo.nodeIdConfig = payloadRequest.nodeId;
 			sysInfo.frequencyConfig = payloadRequest.frequency;
 			sysInfo.sfConfig = payloadRequest.sf;
-			result = MotorConfig_Save();
+			result = saveMotorConfig();
 			if (!result) {
 				sysInfo.netIdConfig = oldNet;
 				sysInfo.nodeIdConfig = oldNode;
@@ -401,7 +422,7 @@ void handleConfigConnection(LoraPackage_t fwPackage) {
 
 }
 
-void handleAlarmMessage(LoraPackage_t fwPackage)
+static void handleAlarmMessage(LoraPackage_t fwPackage)
 {
 	if ((fwPackage.netId != sysInfo.netId && fwPackage.netId != LORA_NET_ID_CONFIG) ||
 			(fwPackage.nodeId != sysInfo.nodeId && fwPackage.nodeId != LORA_NODE_ID_CONFIG) ||
