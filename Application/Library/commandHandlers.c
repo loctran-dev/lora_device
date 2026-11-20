@@ -16,7 +16,7 @@ extern RTC_HandleTypeDef hrtc;
 static uint8_t sendResponse(LoraPackage_t *packet, void *payload, uint8_t size)
 {
     packet->type = LORA_PACKAGE_TYPE_RESPONSE;
-    updatePackagePayload(packet, payload, size);
+    Comm_UpdatePackagePayload(packet, payload, size);
     return osMessageQueuePut(txMsgQueueHandle, packet, 0, 0) == osOK;
 }
 
@@ -180,7 +180,7 @@ void handleSetConfig(LoraPackage_t packet)
         }
     }
     packet.type = LORA_PACKAGE_TYPE_RESPONSE;
-    updatePackagePayload(&packet, (uint8_t *)&reply, sizeof(reply));
+    Comm_UpdatePackagePayload(&packet, (uint8_t *)&reply, sizeof(reply));
     osMessageQueuePut(txMsgQueueHandle, &packet, 0, 0);
 }
 
@@ -203,7 +203,7 @@ void handleGetStatus(LoraPackage_t fwPackage) {
 		return;
 	}		
 	PayloadRequestGetStatus_t payloadRequest;
-	if (parsePayloadReqGetStatus(fwPackage, &payloadRequest) == FALSE) {
+	if (Comm_ParsePayloadReqGetStatus(fwPackage, &payloadRequest) == FALSE) {
 		return;
 	}
 	
@@ -256,7 +256,7 @@ void handleControlPower(LoraPackage_t fwPackage) {
 	}
 
 	PayloadRequestCtrlPower_t payloadCtrlPwr;
-	if (parsePayloadReqCtrlPwr(fwPackage, &payloadCtrlPwr) == FALSE) {
+	if (Comm_ParsePayloadReqCtrlPwr(fwPackage, &payloadCtrlPwr) == FALSE) {
 		return;
 	}
 	
@@ -286,7 +286,7 @@ void handleSetSchedule(LoraPackage_t fwPackage) {
 
 	uint8_t result = FALSE;
 	PayloadRequestSetSchedule_t payloadRequest;
-	if (parsePayloadReqSetSchedule(fwPackage, &payloadRequest) == FALSE) {
+	if (Comm_ParsePayloadReqSetSchedule(fwPackage, &payloadRequest) == FALSE) {
 		return;
 	}
 	
@@ -321,7 +321,7 @@ void handleSyncTime(LoraPackage_t fwPackage) {
 
 	uint8_t result = FALSE;
 	PayloadRequestSyncTime_t payloadRequest;
-	if (parsePayloadReqSyncTime(fwPackage, &payloadRequest) == FALSE) {
+	if (Comm_ParsePayloadReqSyncTime(fwPackage, &payloadRequest) == FALSE) {
 		return;
 	}
 	
@@ -369,7 +369,7 @@ void handleConfigConnection(LoraPackage_t fwPackage) {
 	}
 	uint8_t result = FALSE;
 	PayloadRequestConfigConnection_t payloadRequest;
-	if (parsePayloadReqConfigConnection(fwPackage, &payloadRequest) == TRUE) {
+	if (Comm_ParsePayloadReqConfigConnection(fwPackage, &payloadRequest) == TRUE) {
 		if (payloadRequest.serial == factoryInfo.serial) {
 			uint8_t oldNet = sysInfo.netIdConfig, oldNode = sysInfo.nodeIdConfig, oldSF = sysInfo.sfConfig;
 			int oldFrequency = sysInfo.frequencyConfig;

@@ -60,7 +60,7 @@ void MotorHistory_Tick(void)
     const HistoryRecord *r=HJ_Pending();
     if (r) {
         HistoryPush push={r->event,HJ_Crc(&r->event,sizeof(r->event))};
-        LoraPackage_t packet=createNewPackage(sysInfo.netId,sysInfo.nodeId,CMD_HISTORY,
+        LoraPackage_t packet=Comm_CreateNewPackage(sysInfo.netId,sysInfo.nodeId,CMD_HISTORY,
             LORA_PACKAGE_TYPE_REQUEST,(uint8_t *)&push,sizeof(push),0);
         inFlight=r->event.id; queued=1;
         if (osMessageQueuePut(txMsgQueueHandle,&packet,0,0)!=osOK) queued=0;

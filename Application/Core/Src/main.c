@@ -675,7 +675,7 @@ __attribute__((noinline)) static void Motor_SendCurrentAlarm(void)
 	payload.moduleIndex = 0;
 	payload.alarmCode = sysInfo.alarmCode;
 	payload.alarmTime = sysInfo.currentTime;
-	LoraPackage_t packet = createPackageRequestAlarmMsg(sysInfo.netId, sysInfo.nodeId, payload);
+	LoraPackage_t packet = Comm_CreateReqAlarmMsg(sysInfo.netId, sysInfo.nodeId, payload);
 	osMessageQueuePut(txMsgQueueHandle, &packet, 0, pdMS_TO_TICKS(100));
 }
 
@@ -900,7 +900,7 @@ void StartLoraReceiveTask(void *argument)
 		{
             osMutexAcquire(motorRadioMutex,osWaitForever);
 			uint8_t rxLength = LoRa_receive(&sLoRaCtrl, rxBuffer, 128);
-			processRxData(rxBuffer, rxLength);
+			Comm_ProcessRxData(rxBuffer, rxLength);
             osMutexRelease(motorRadioMutex);
 		}
   }

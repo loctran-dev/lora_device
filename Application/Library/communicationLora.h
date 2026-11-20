@@ -140,19 +140,18 @@ typedef struct PayloadResponseConfigConnection_t {
 #pragma pack()
 // Payload for CMD_ALARM_MESSAGE
 
-LoraPackage_t createNewPackage(uint8_t netId, uint8_t nodeId, uint8_t opcode, uint8_t type, uint8_t *payload, int16_t payloadLength, uint32_t timeout);
-void updatePackagePayload(LoraPackage_t *packageOut, uint8_t *payload, int16_t payloadLength);
-LoraPackage_t createPackageRequestGetStatus(uint8_t netId, uint8_t nodeId, PayloadResponseGetStatus_t payload);
-LoraPackage_t createPackageRequestAlarmMsg(uint8_t netId, uint8_t nodeId, PayloadRequestAlarm_t payload);
+LoraPackage_t Comm_CreateNewPackage(uint8_t netId, uint8_t nodeId, uint8_t opcode, uint8_t type, uint8_t *payload, int16_t payloadLength, uint32_t timeout);
+void Comm_UpdatePackagePayload(LoraPackage_t *packageOut, uint8_t *payload, int16_t payloadLength);
+LoraPackage_t Comm_CreateReqGetStatus(uint8_t netId, uint8_t nodeId, PayloadResponseGetStatus_t payload);
+LoraPackage_t Comm_CreateReqAlarmMsg(uint8_t netId, uint8_t nodeId, PayloadRequestAlarm_t payload);
 
 
-void processRxData(uint8_t *buffer, uint32_t length); 
+void Comm_ProcessRxData(uint8_t *buffer, uint32_t length);
 void handleValidPackageForNode(LoraPackage_t fwPackage);
-uint8_t parsePayloadReqGetStatus (LoraPackage_t fwPackage, PayloadRequestGetStatus_t *payload);
-uint8_t parsePayloadReqCtrlPwr (LoraPackage_t fwPackage, PayloadRequestCtrlPower_t *payload);
-uint8_t parsePayloadReqSetSchedule (LoraPackage_t package, PayloadRequestSetSchedule_t *payload);
-uint8_t parsePayloadReqSyncTime (LoraPackage_t package, PayloadRequestSyncTime_t *payload);
-uint8_t parsePayloadReqConfigConnection (LoraPackage_t package, PayloadRequestConfigConnection_t *payload);
-uint8_t parsePayloadReqAlarm (LoraPackage_t package, PayloadRequestAlarm_t *payload);
-void executeCommand(LoraPackage_t package);
+uint8_t Comm_ParsePayloadReqGetStatus(LoraPackage_t fwPackage, PayloadRequestGetStatus_t *payload);
+uint8_t Comm_ParsePayloadReqCtrlPwr(LoraPackage_t fwPackage, PayloadRequestCtrlPower_t *payload);
+uint8_t Comm_ParsePayloadReqSetSchedule(LoraPackage_t package, PayloadRequestSetSchedule_t *payload);
+uint8_t Comm_ParsePayloadReqSyncTime(LoraPackage_t package, PayloadRequestSyncTime_t *payload);
+uint8_t Comm_ParsePayloadReqConfigConnection(LoraPackage_t package, PayloadRequestConfigConnection_t *payload);
+uint8_t Comm_ParsePayloadReqAlarm(LoraPackage_t package, PayloadRequestAlarm_t *payload);
 #endif

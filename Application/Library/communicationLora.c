@@ -8,6 +8,8 @@ uint8_t nodeid = 0x01;
 
 uint16_t currentTransactionID = 0;
 
+static void executeCommand(LoraPackage_t package);
+
 __attribute__((noinline)) static uint8_t parsePayload(LoraPackage_t *packet, uint8_t code,
                                                       void *payload, uint8_t size)
 {
@@ -17,13 +19,13 @@ __attribute__((noinline)) static uint8_t parsePayload(LoraPackage_t *packet, uin
     memcpy(payload, packet->rawData + LORA_PACKAGE_HEADER_SIZE, size);
     return TRUE;
 }
-uint16_t generateTransactionID()
+static uint16_t generateTransactionID(void)
 {
     currentTransactionID++;
     return currentTransactionID;
 }
 
-void updatePackagePayload(LoraPackage_t *packageOut, uint8_t *payload, int16_t payloadLength)
+void Comm_UpdatePackagePayload(LoraPackage_t *packageOut, uint8_t *payload, int16_t payloadLength)
 {
 		packageOut->length = LORA_PACKAGE_HEADER_SIZE - sizeof(packageOut->signature) + payloadLength;
     memcpy(packageOut->rawData, packageOut, LORA_PACKAGE_HEADER_SIZE);
@@ -33,7 +35,7 @@ void updatePackagePayload(LoraPackage_t *packageOut, uint8_t *payload, int16_t p
     memcpy(&packageOut->rawData[packageOut->byteCount - 1], &packageOut->checkSum, sizeof(packageOut->checkSum));
 }
 
-LoraPackage_t createNewPackage(uint8_t netId, uint8_t nodeId, uint8_t opcode, uint8_t type, uint8_t *payload, int16_t payloadLength, uint32_t timeout)
+LoraPackage_t Comm_CreateNewPackage(uint8_t netId, uint8_t nodeId, uint8_t opcode, uint8_t type, uint8_t *payload, int16_t payloadLength, uint32_t timeout)
 {
     LoraPackage_t packageOut;
     memset(packageOut.rawData, 0x00, LORA_PACKAGE_RAW_DATA_SIZE);
@@ -55,16 +57,16 @@ LoraPackage_t createNewPackage(uint8_t netId, uint8_t nodeId, uint8_t opcode, ui
     return packageOut;
 }
 
-LoraPackage_t createPackageRequestGetStatus(uint8_t netId, uint8_t nodeId, PayloadResponseGetStatus_t payload)
+LoraPackage_t Comm_CreateReqGetStatus(uint8_t netId, uint8_t nodeId, PayloadResponseGetStatus_t payload)
 {
-    return createNewPackage(netId, nodeId, CMD_GET_STATUS, LORA_PACKAGE_TYPE_RESPONSE, (uint8_t *)&payload, sizeof(payload), 0);
+    return Comm_CreateNewPackage(netId, nodeId, CMD_GET_STATUS, LORA_PACKAGE_TYPE_RESPONSE, (uint8_t *)&payload, sizeof(payload), 0);
 }
 
-LoraPackage_t createPackageRequestAlarmMsg(uint8_t netId, uint8_t nodeId, PayloadRequestAlarm_t payload) 
+LoraPackage_t Comm_CreateReqAlarmMsg(uint8_t netId, uint8_t nodeId, PayloadRequestAlarm_t payload)
 {
-	return createNewPackage(netId, nodeId, CMD_ALARM_MESSAGE, LORA_PACKAGE_TYPE_REQUEST, (uint8_t*)&payload, sizeof(payload), 0);
+	return Comm_CreateNewPackage(netId, nodeId, CMD_ALARM_MESSAGE, LORA_PACKAGE_TYPE_REQUEST, (uint8_t*)&payload, sizeof(payload), 0);
 }
-void processRxData( uint8_t *buffer, uint32_t length) 
+void Comm_ProcessRxData(uint8_t *buffer, uint32_t length)
 {
 		if (length < 3) return;
 
@@ -111,33 +113,33 @@ void processRxData( uint8_t *buffer, uint32_t length)
 				return;
 		}
 }
-uint8_t parsePayloadReqGetStatus (LoraPackage_t package, PayloadRequestGetStatus_t *payload)
+uint8_t Comm_ParsePayloadReqGetStatus(LoraPackage_t package, PayloadRequestGetStatus_t *payload)
 {
     return parsePayload(&package, CMD_GET_STATUS, payload, sizeof(*payload));
 }
-uint8_t parsePayloadReqCtrlPwr (LoraPackage_t package, PayloadRequestCtrlPower_t *payload)
+uint8_t Comm_ParsePayloadReqCtrlPwr(LoraPackage_t package, PayloadRequestCtrlPower_t *payload)
 {
     return parsePayload(&package, CMD_CONTROL_POWER, payload, sizeof(*payload));
 }
-uint8_t parsePayloadReqSetSchedule (LoraPackage_t package, PayloadRequestSetSchedule_t *payload)
+uint8_t Comm_ParsePayloadReqSetSchedule(LoraPackage_t package, PayloadRequestSetSchedule_t *payload)
 {
     return parsePayload(&package, CMD_SET_SCHEDULE, payload, sizeof(*payload));
 }
 
-uint8_t parsePayloadReqSyncTime (LoraPackage_t package, PayloadRequestSyncTime_t *payload)
+uint8_t Comm_ParsePayloadReqSyncTime(LoraPackage_t package, PayloadRequestSyncTime_t *payload)
 {
     return parsePayload(&package, CMD_SYNC_TIME, payload, sizeof(*payload));
 }
-uint8_t parsePayloadReqConfigConnection (LoraPackage_t package, PayloadRequestConfigConnection_t *payload)
+uint8_t Comm_ParsePayloadReqConfigConnection(LoraPackage_t package, PayloadRequestConfigConnection_t *payload)
 {
     return parsePayload(&package, CMD_CONFIG_CONNECTION, payload, sizeof(*payload));
 }
-uint8_t parsePayloadReqAlarm (LoraPackage_t package, PayloadRequestAlarm_t *payload)
+uint8_t Comm_ParsePayloadReqAlarm(LoraPackage_t package, PayloadRequestAlarm_t *payload)
 {
     return parsePayload(&package, CMD_ALARM_MESSAGE, payload, sizeof(*payload));
 }
 
-void executeCommand(LoraPackage_t package) {
+static void executeCommand(LoraPackage_t package) {
     for (int i = 0; cmdTable[i].handler != NULL; i++) {
         if (cmdTable[i].cmdCode == package.code) {
             cmdTable[i].handler(package); 
