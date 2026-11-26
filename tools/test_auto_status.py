@@ -33,65 +33,69 @@ class AutoStatusTests(harness.FirmwareHarness):
             self.cpu.hook_add(UC_HOOK_CODE, callback, begin=address, end=address)
 
     def test_period_counts_from_successful_status_transmission(self):
-        self.call("Motor_AutoStatusTick", 1999)
+        self.call("CmdHandler_Motor_AutoStatusTick", 1999)
         self.assertFalse(self.packets)
-        self.call("Motor_AutoStatusTick", 2000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 2000)
         self.assertEqual(len(self.packets), 1)
-        self.call("Motor_AutoStatusTick", 5000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 5000)
         self.assertEqual(len(self.packets), 1)  # Already queued, not transmitted yet.
         self.now = 5000
-        self.call("Motor_StatusSent", 1)
-        self.call("Motor_AutoStatusTick", 6999)
+        self.call("CmdHandler_Motor_StatusSent", 1)
+        self.call("CmdHandler_Motor_AutoStatusTick", 6999)
         self.assertEqual(len(self.packets), 1)
-        self.call("Motor_AutoStatusTick", 7000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 7000)
         self.assertEqual(len(self.packets), 2)
 
     def test_status_wire_address_type_and_checksum(self):
-        self.call("Motor_AutoStatusTick", 2000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 2000)
         packet = self.packets[0]
         count = int.from_bytes(packet[10:14], "little")
         wire = packet[14:14 + count]
         self.assertEqual(wire[:2], b"\x55\xFF")
         self.assertEqual(wire[3:6], bytes([1, 5, 2]))  # NET, NODE, RESPONSE
         self.assertEqual(wire[6:9], bytes([0, 0, 1]))  # Unsolicited transaction 0, status opcode.
-        self.assertEqual(wire[9:11], b"\x00\x01")
+        # Autonomous reports use the LORA_MODULE_ALL layout: marker, local time, count, records.
+        self.assertEqual(wire[9], 0xFF)
+        self.assertEqual(wire[14], 1)                    # one motor
+        self.assertEqual(wire[15:17], b"\x00\x01")       # module 0, result 1
+        self.assertEqual(len(wire), 9 + 6 + 13 + 1)      # header, all-status header, record, CRC
         self.assertEqual(wire[-1], (-sum(wire[:wire[2]])) & 255)
 
     def test_sender_completion_before_queue_returns_is_not_lost(self):
         self.complete_before_put_returns = True
-        self.call("Motor_AutoStatusTick", 2000)
-        self.call("Motor_AutoStatusTick", 4000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 2000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 4000)
         self.assertEqual(len(self.packets), 2)
 
     def test_solicited_status_tx_also_resets_period(self):
         request = bytearray(270)
         request[:9] = struct.pack("<HBBBBHB", 0xFF55, 12, 1, 5, 1, 123, 1)
         self.cpu.mem_write(0x20008800, bytes(request))
-        self.call("Motor_QueueStatus", 0x20008800)
+        self.call("queueStatus", 0x20008800, 0)
         self.assertEqual(self.packets[-1][6:8], struct.pack("<H", 123))
         self.now = 1500
-        self.call("Motor_StatusSent", 1)
-        self.call("Motor_AutoStatusTick", 3499)
+        self.call("CmdHandler_Motor_StatusSent", 1)
+        self.call("CmdHandler_Motor_AutoStatusTick", 3499)
         self.assertEqual(len(self.packets), 1)
-        self.call("Motor_AutoStatusTick", 3500)
+        self.call("CmdHandler_Motor_AutoStatusTick", 3500)
         self.assertEqual(len(self.packets), 2)
 
     def test_zero_disables_autonomous_transmission(self):
         self.set("autoStatusSeconds", 0, 2)
-        self.call("Motor_AutoStatusTick", 999999)
+        self.call("CmdHandler_Motor_AutoStatusTick", 999999)
         self.assertFalse(self.packets)
 
     def test_configuration_mode_does_not_push_status(self):
         self.set("sysState", 1)
-        self.call("Motor_AutoStatusTick", 999999)
+        self.call("CmdHandler_Motor_AutoStatusTick", 999999)
         self.assertFalse(self.packets)
 
     def test_failed_radio_tx_does_not_update_last_status_time(self):
-        self.call("Motor_AutoStatusTick", 2000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 2000)
         self.now = 3000
-        self.call("Motor_StatusSent", 0)
+        self.call("CmdHandler_Motor_StatusSent", 0)
         self.assertEqual(self.get("lastStatusTxTick", 4), 0)
-        self.call("Motor_AutoStatusTick", 4000)
+        self.call("CmdHandler_Motor_AutoStatusTick", 4000)
         self.assertEqual(len(self.packets), 2)
 
     def test_legacy_record_defaults_and_new_period_survive(self):
@@ -99,13 +103,13 @@ class AutoStatusTests(harness.FirmwareHarness):
         prefix = struct.pack("<III", *words)
         legacy = prefix + struct.pack("<II", (-sum(prefix)) & 255, 0x31474643)
         self.cpu.mem_write(0x0800FC00, legacy)
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("autoStatusSeconds", 2), 60)
         self.set("autoStatusSeconds", 3, 2)
-        self.assertEqual(self.call("MotorConfig_Save"), 1)
+        self.assertEqual(self.call("saveMotorConfig"), 1)
         self.assertEqual(bytes(self.cpu.mem_read(0x0800FC00, 20)), legacy)
         self.set("autoStatusSeconds", 0, 2)
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("autoStatusSeconds", 2), 3)
 
     def test_calendar_conversion_months_leap_days_and_weekdays(self):

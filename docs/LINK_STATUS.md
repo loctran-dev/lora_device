@@ -32,3 +32,14 @@ change. The bootloader binary was NOT reflashed.
 36 host/ARM-code tests pass, including pending-TX preemption and 325 calendar
 roundtrips. USB app update verified CRC. Hardware SET_CONFIG and repeated status
 were checked with PWR=0; no ON command or motor output test was performed.
+
+## Status for every motor (2026-11-26)
+
+CMD_GET_STATUS with moduleIndex 0xFF (LORA_MODULE_ALL) is answered with a
+6-byte header (0xFF, local time, count) and one 13-byte PayloadStatusRecord_t
+per motor; SingleMotor sends count = 1 (module 0). moduleIndex 0 still gets
+the 17-byte single layout; other values are ignored. Autonomous reports now
+use the 0xFF layout. The remote side and compatibility notes are in
+Lora_remote/docs/STATUS_ALL.md. Tests: test_status_clock, test_auto_status.
+Bench: application 44380 bytes, CRC32 93385914, ST-Link sectors 0..43;
+configuration (NET=1 NODE=1) kept.

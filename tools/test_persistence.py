@@ -88,12 +88,14 @@ class FirmwareHarness(unittest.TestCase):
             cpu.reg_write(UC_ARM_REG_PC, cpu.reg_read(UC_ARM_REG_LR))
             return
 
-    def call(self, name, argument=None):
+    def call(self, name, argument=None, argument1=None):
         stop = 0x0801FFF0
         self.cpu.reg_write(UC_ARM_REG_SP, 0x2000F000)
         self.cpu.reg_write(UC_ARM_REG_LR, stop | 1)
         if argument is not None:
             self.cpu.reg_write(UC_ARM_REG_R0, argument & 0xFFFFFFFF)
+        if argument1 is not None:
+            self.cpu.reg_write(UC_ARM_REG_R1, argument1 & 0xFFFFFFFF)
         self.cpu.emu_start(symbol(name)[0] | 1, stop, count=200000)
         self.assertEqual(self.cpu.reg_read(UC_ARM_REG_PC), stop)
         return self.cpu.reg_read(UC_ARM_REG_R0)
@@ -106,9 +108,9 @@ class PersistenceTests(FirmwareHarness):
         self.set("nodeIdConfig", 3)
         self.set("frequencyConfig", 434, 4)
         self.set("sfConfig", 8)
-        self.assertEqual(self.call("MotorConfig_Save"), 1)
+        self.assertEqual(self.call("saveMotorConfig"), 1)
         self.defaults()
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("alarmThresholdCentiAmp", 2), 1234)
         self.assertEqual(self.get("alarmDelaySeconds", 2), 30)
         self.assertEqual(self.get("netIdConfig"), 2)
@@ -117,53 +119,53 @@ class PersistenceTests(FirmwareHarness):
         self.assertEqual(self.get("sfConfig"), 8)
 
     def test_empty_keeps_defaults(self):
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("frequencyConfig", 4), 433)
         self.assertEqual(self.get("alarmThresholdCentiAmp", 2), 0)
 
     def test_identical_save_no_wear(self):
-        self.assertEqual(self.call("MotorConfig_Save"), 1)
+        self.assertEqual(self.call("saveMotorConfig"), 1)
         self.calls.clear()
-        self.assertEqual(self.call("MotorConfig_Save"), 1)
+        self.assertEqual(self.call("saveMotorConfig"), 1)
         self.assertFalse(self.calls)
 
     def test_corrupt_new_record_falls_back_to_old(self):
         self.set("alarmThresholdCentiAmp", 100, 2)
-        self.call("MotorConfig_Save")
+        self.call("saveMotorConfig")
         self.set("alarmThresholdCentiAmp", 200, 2)
-        self.call("MotorConfig_Save")
+        self.call("saveMotorConfig")
         self.cpu.mem_write(0x0800FC00 + 20, b"\x00")
         self.defaults()
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("alarmThresholdCentiAmp", 2), 100)
 
     def test_torn_commit_not_loaded_and_next_save_skips_slot(self):
-        self.call("MotorConfig_Save")
+        self.call("saveMotorConfig")
         self.cpu.mem_write(0x0800FC00 + 20, b"\x00" * 16)
         self.set("alarmDelaySeconds", 42, 2)
-        self.assertEqual(self.call("MotorConfig_Save"), 1)
+        self.assertEqual(self.call("saveMotorConfig"), 1)
         self.assertNotEqual(bytes(self.cpu.mem_read(0x0800FC00 + 40 + 16, 4)), b"\xFF" * 4)
         self.defaults()
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("alarmDelaySeconds", 2), 42)
 
     def test_full_page_erases_only_settings_page(self):
         for value in range(52):
             self.set("alarmThresholdCentiAmp", value, 2)
-            self.assertEqual(self.call("MotorConfig_Save"), 1)
+            self.assertEqual(self.call("saveMotorConfig"), 1)
         self.assertEqual(self.calls.count("HAL_FLASHEx_Erase"), 1)
         self.defaults()
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("alarmThresholdCentiAmp", 2), 51)
 
     def test_reject_while_motor_on(self):
         self.set("powerState", 1)
-        self.assertEqual(self.call("MotorConfig_Save"), 0)
+        self.assertEqual(self.call("saveMotorConfig"), 0)
         self.assertFalse(self.calls)
 
     def test_failure_relocks_flash(self):
         self.fail_program = True
-        self.assertEqual(self.call("MotorConfig_Save"), 0)
+        self.assertEqual(self.call("saveMotorConfig"), 0)
         self.assertEqual(self.calls[-1], "HAL_FLASH_Lock")
 
     def connection_request(self):
@@ -199,7 +201,7 @@ class PersistenceTests(FirmwareHarness):
     def test_pairing_ack_after_persistent_commit(self):
         self.assertEqual(self.connection_request(), 1)
         self.defaults()
-        self.call("MotorConfig_Load")
+        self.call("CmdHandler_MotorConfig_Load")
         self.assertEqual(self.get("netIdConfig"), 2)
         self.assertEqual(self.get("nodeIdConfig"), 3)
         self.assertEqual(self.get("frequencyConfig", 4), 434)

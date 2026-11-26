@@ -119,6 +119,34 @@ typedef struct PayloadResponseGetStatus_t {
 	uint32_t scheduleTime;
 }PayloadResponseGetStatus_t;
 #pragma pack()
+
+/* CMD_GET_STATUS for every motor of the device. A request with moduleIndex
+   LORA_MODULE_ALL is answered with a 6-byte header (LORA_MODULE_ALL, local time,
+   count) followed by count PayloadStatusRecord_t, one per motor this device has.
+   Autonomous reports use the same layout. Must match the remote's
+   PayloadResponseGetStatusAll_t (communication_lora.h). */
+#define LORA_MODULE_ALL         0xFF
+#define LORA_STATUS_RECORDS_MAX 6
+
+#pragma pack(1)
+typedef struct PayloadStatusRecord_t {
+	uint8_t moduleIndex;
+	uint8_t result;
+	uint8_t powerState;
+	uint16_t phaseCurrent[3];
+	uint32_t scheduleTime;
+}PayloadStatusRecord_t;
+#pragma pack()
+
+/* SingleMotor: one record. */
+#pragma pack(1)
+typedef struct PayloadResponseGetStatusAll_t {
+	uint8_t moduleIndex;
+	uint32_t localTime;
+	uint8_t count;
+	PayloadStatusRecord_t records[1];
+}PayloadResponseGetStatusAll_t;
+#pragma pack()
 // Payload for CMD_CONTROL_POWER
 // Payload for CMD_SET_SCHEDULE
 // Payload for CMD_SYNC_TIME

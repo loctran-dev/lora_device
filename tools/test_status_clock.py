@@ -30,7 +30,7 @@ class StatusClockTests(h.FirmwareHarness):
                 self.responses.append(bytes(cpu.mem_read(cpu.reg_read(UC_ARM_REG_R1),270)))
             cpu.reg_write(UC_ARM_REG_R0,result);cpu.reg_write(UC_ARM_REG_PC,cpu.reg_read(UC_ARM_REG_LR))
         self.cpu.hook_add(UC_HOOK_CODE,intercept)
-    def sync(self,target):return self.call("Motor_SyncStatusTime",target)
+    def sync(self,target):return self.call("syncStatusTime",target)
     def test_off_clock_and_status_cache_update_immediately(self):
         self.assertEqual(self.sync(self.now+3600),1)
         self.assertEqual(self.get("currentTime",4),self.now+3600)
@@ -95,6 +95,17 @@ class StatusClockTests(h.FirmwareHarness):
         # Payload is packed: module/result, phase currents[3], power, local time/deadline.
         self.assertEqual(struct.unpack_from("<II",raw,9+9),(self.now+86400,self.now+86400+60))
         self.assertEqual(struct.unpack_from("<H",raw,6)[0],42)
+    def test_all_modules_request_gets_one_record_per_motor(self):
+        # moduleIndex 0xFF (LORA_MODULE_ALL): marker, local time, count, then one record.
+        self.set("powerState",1);self.set("scheduleTime",self.now+60,4)
+        self.request(self.now+86400,module=0xFF)
+        raw=self.responses[-1][14:]
+        self.assertEqual(struct.unpack_from("<H",raw,6)[0],42)                 # same transaction
+        self.assertEqual(struct.unpack_from("<BIB",raw,9),(0xFF,self.now+86400,1))
+        self.assertEqual(struct.unpack_from("<BBB",raw,15),(0,1,1))            # module 0, valid, ON
+        self.assertEqual(struct.unpack_from("<I",raw,15+9)[0],self.now+86400+60)
+        self.assertEqual(raw[2],9-2+6+13)                                      # length excludes the signature
+        self.assertIn("setRTC_dateTime",self.events)                           # clock sync still applied
     def test_wrong_module_or_response_does_not_set_clock_or_reply(self):
         self.request(self.now+86400,module=1)
         self.request(self.now+86400,kind=2)

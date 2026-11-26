@@ -120,17 +120,40 @@ const CmdMapping_t cmdTable[] = {
 
 static volatile uint8_t statusQueued;
 
-__attribute__((noinline)) static uint8_t queueStatus(LoraPackage_t *request)
+/* Status reply or autonomous report. all: LORA_MODULE_ALL layout (header +
+   one record for this single motor); otherwise the single-module layout of
+   module 0. Autonomous reports (request NULL) always use the all layout. */
+__attribute__((noinline)) static uint8_t queueStatus(LoraPackage_t *request, uint8_t all)
 {
-    PayloadResponseGetStatus_t payload;
+    union {
+        PayloadResponseGetStatus_t one;
+        PayloadResponseGetStatusAll_t all;
+    } payload;
+    PayloadStatusRecord_t *record = &payload.all.records[0];
     LoraPackage_t packet;
-    payload.moduleIndex = 0;
-    payload.result = 1;
-    for (uint8_t i = 0; i < 3; i++)
-        payload.phaseCurrent[i] = (uint16_t)(sysInfo.phaseCurrent[i] * 100.0f);
-    payload.powerState = sysInfo.powerState;
-    payload.localTime = sysInfo.currentTime;
-    payload.scheduleTime = sysInfo.scheduleTime;
+    uint8_t size;
+    if (!request) all = 1;
+    if (all) {
+        payload.all.moduleIndex = LORA_MODULE_ALL;
+        payload.all.localTime = sysInfo.currentTime;
+        payload.all.count = 1;
+        record->moduleIndex = 0;
+        record->result = 1;
+        record->powerState = sysInfo.powerState;
+        for (uint8_t i = 0; i < 3; i++)
+            record->phaseCurrent[i] = (uint16_t)(sysInfo.phaseCurrent[i] * 100.0f);
+        record->scheduleTime = sysInfo.scheduleTime;
+        size = sizeof(payload.all);
+    } else {
+        payload.one.moduleIndex = 0;
+        payload.one.result = 1;
+        for (uint8_t i = 0; i < 3; i++)
+            payload.one.phaseCurrent[i] = (uint16_t)(sysInfo.phaseCurrent[i] * 100.0f);
+        payload.one.powerState = sysInfo.powerState;
+        payload.one.localTime = sysInfo.currentTime;
+        payload.one.scheduleTime = sysInfo.scheduleTime;
+        size = sizeof(payload.one);
+    }
     if (!request) {
         packet.signature = LORA_PACKAGE_SIGNATURE;
         packet.netId = sysInfo.netId;
@@ -142,7 +165,7 @@ __attribute__((noinline)) static uint8_t queueStatus(LoraPackage_t *request)
     /* Queueing may immediately preempt this low-priority timer with the TX
        task. Mark pending BEFORE publishing, otherwise its completion is lost. */
     statusQueued = 1;
-    uint8_t queued = sendResponse(request, &payload, sizeof(payload));
+    uint8_t queued = sendResponse(request, &payload, size);
     if (!queued) statusQueued = 0;
     return queued;
 }
@@ -159,7 +182,7 @@ void CmdHandler_Motor_AutoStatusTick(uint32_t now)
     if (sysInfo.sysState == SYSSTATE_RUNNING && sysInfo.netId && sysInfo.nodeId &&
         sysInfo.autoStatusSeconds && !statusQueued &&
         (uint32_t)(now - sysInfo.lastStatusTxTick) >= (uint32_t)sysInfo.autoStatusSeconds * configTICK_RATE_HZ) {
-        queueStatus(NULL);
+        queueStatus(NULL, 1);
     }
 }
 
@@ -228,12 +251,13 @@ static void handleGetStatus(LoraPackage_t fwPackage) {
 		return;
 	}
 	
-    if (payloadRequest.moduleIndex != 0) return;
+    /* Module 0 (the only motor) or every motor. */
+    if (payloadRequest.moduleIndex != 0 && payloadRequest.moduleIndex != LORA_MODULE_ALL) return;
     syncStatusTime(payloadRequest.syncTime);
 	sysInfo.lastCommTick = xTaskGetTickCount();
 	
 	
-	queueStatus(&fwPackage);
+	queueStatus(&fwPackage, payloadRequest.moduleIndex == LORA_MODULE_ALL);
 }
 
 static uint8_t syncStatusTime(uint32_t timestamp)
