@@ -8,6 +8,12 @@
 /* HistoryEvent.flags */
 #define HIST_TIME_UNKNOWN 1u
 #define HIST_LOCAL        128u
+/* Bits 1..3: module of a motor event, 0..5 (remote KI-12). Old records and
+   this single-motor device leave them clear, which reads as module 0. */
+#define HIST_MODULE_MASK  0x0Eu
+#define HIST_MODULE_SHIFT 1u
+#define HIST_MODULE(flags)        ((uint8_t)(((flags) & HIST_MODULE_MASK) >> HIST_MODULE_SHIFT))
+#define HIST_FLAGS_MODULE(module) ((uint8_t)(((module) << HIST_MODULE_SHIFT) & HIST_MODULE_MASK))
 
 /* HistoryEvent.error */
 #define HIST_ERROR_LOW_CURRENT 1u
