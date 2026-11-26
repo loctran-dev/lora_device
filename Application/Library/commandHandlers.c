@@ -418,17 +418,29 @@ static void handleConfigConnection(LoraPackage_t fwPackage) {
 		if (payloadRequest.serial == factoryInfo.serial) {
 			uint8_t oldNet = sysInfo.netIdConfig, oldNode = sysInfo.nodeIdConfig, oldSF = sysInfo.sfConfig;
 			int oldFrequency = sysInfo.frequencyConfig;
-			
+			uint16_t oldThreshold = sysInfo.alarmThresholdCentiAmp;
+			uint16_t oldDelay = sysInfo.alarmDelaySeconds;
+			uint16_t oldAuto = sysInfo.autoStatusSeconds;
+
 			sysInfo.netIdConfig = payloadRequest.netId;
 			sysInfo.nodeIdConfig = payloadRequest.nodeId;
 			sysInfo.frequencyConfig = payloadRequest.frequency;
 			sysInfo.sfConfig = payloadRequest.sf;
+			/* Pairing starts the motor from the default settings, as the remote
+			   does for its copy (threshold, delay and auto-status 0). Saved in
+			   the same record write as the new radio settings. */
+			sysInfo.alarmThresholdCentiAmp = 0;
+			sysInfo.alarmDelaySeconds = 0;
+			sysInfo.autoStatusSeconds = 0;
 			result = saveMotorConfig();
 			if (!result) {
 				sysInfo.netIdConfig = oldNet;
 				sysInfo.nodeIdConfig = oldNode;
 				sysInfo.sfConfig = oldSF;
 				sysInfo.frequencyConfig = oldFrequency;
+				sysInfo.alarmThresholdCentiAmp = oldThreshold;
+				sysInfo.alarmDelaySeconds = oldDelay;
+				sysInfo.autoStatusSeconds = oldAuto;
 			}
 		}
 		else {

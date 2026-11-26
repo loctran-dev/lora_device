@@ -207,6 +207,32 @@ class PersistenceTests(FirmwareHarness):
         self.assertEqual(self.get("frequencyConfig", 4), 434)
         self.assertEqual(self.get("sfConfig"), 8)
 
+    def motor_settings(self, threshold, delay, auto):
+        self.set("alarmThresholdCentiAmp", threshold, 2)
+        self.set("alarmDelaySeconds", delay, 2)
+        self.set("autoStatusSeconds", auto, 2)
+
+    def assert_motor_settings(self, threshold, delay, auto):
+        self.assertEqual((self.get("alarmThresholdCentiAmp", 2), self.get("alarmDelaySeconds", 2),
+                          self.get("autoStatusSeconds", 2)), (threshold, delay, auto))
+
+    def test_pairing_resets_motor_settings_in_the_same_record(self):
+        # Pairing starts from the defaults on both sides (remote KI-10).
+        self.motor_settings(1234, 30, 2)
+        self.assertEqual(self.connection_request(), 1)
+        self.assert_motor_settings(0, 0, 0)
+        self.defaults()
+        self.motor_settings(77, 77, 77)                    # only the flash record can bring back 0
+        self.call("CmdHandler_MotorConfig_Load")
+        self.assert_motor_settings(0, 0, 0)
+        self.assertEqual(self.get("nodeIdConfig"), 3)
+
+    def test_pairing_flash_failure_keeps_motor_settings(self):
+        self.motor_settings(1234, 30, 2)
+        self.fail_program = True
+        self.assertEqual(self.connection_request(), 0)
+        self.assert_motor_settings(1234, 30, 2)
+
     def test_pairing_flash_failure_nack_and_rollback(self):
         self.fail_program = True
         self.assertEqual(self.connection_request(), 0)

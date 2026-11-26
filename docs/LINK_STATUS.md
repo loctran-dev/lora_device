@@ -43,3 +43,13 @@ use the 0xFF layout. The remote side and compatibility notes are in
 Lora_remote/docs/STATUS_ALL.md. Tests: test_status_clock, test_auto_status.
 Bench: application 44380 bytes, CRC32 93385914, ST-Link sectors 0..43;
 configuration (NET=1 NODE=1) kept.
+
+## Pairing resets the motor settings (2026-11-27)
+
+When CMD_CONFIG_CONNECTION is accepted, the alarm threshold, alarm delay and
+auto-status period are set to 0 and saved in the same record write as the new
+net/node/frequency/SF; a failed write restores all of them. The remote gives
+its copy of every motor the same defaults when it stores the paired device, so
+both sides agree without a CMD_SET_CONFIG. Tests: test_persistence
+(test_pairing_resets_motor_settings_in_the_same_record, flash failure keeps
+them). Bench: A=2 before re-pairing, A=0 right after CONFIRM.
