@@ -669,14 +669,59 @@ __attribute__((noinline)) uint8_t Motor_CurrentAlarmDue(uint32_t now)
 	return FALSE;
 }
 
-__attribute__((noinline)) static void Motor_SendCurrentAlarm(void)
+__attribute__((noinline)) static void Motor_SendAlarm(uint8_t code, uint32_t startTime)
 {
 	PayloadRequestAlarm_t payload;
-	payload.moduleIndex = 0;
-	payload.alarmCode = sysInfo.alarmCode;
-	payload.alarmTime = sysInfo.currentTime;
+	payload.moduleIndex = 0;    /* one motor per slave for now (remote KI-23) */
+	payload.alarmCode = code;
+	payload.alarmTime = startTime;
 	LoraPackage_t packet = Comm_CreateReqAlarmMsg(sysInfo.netId, sysInfo.nodeId, payload);
 	osMessageQueuePut(txMsgQueueHandle, &packet, 0, pdMS_TO_TICKS(100));
+}
+
+/*
+ * Raise, repeat and clear the low-current alarm (remote KI-17/KI-23).
+ * The alarm is repeated every ALARM_REPEAT_MS with its start time. The remote
+ * clears an alarm by itself after 75 s without a repeat, so keep this period
+ * well below that. CMD_ALARM_MESSAGE has no acknowledgement, so the end of
+ * the alarm (ALARM_CLEARED) is sent ALARM_CLEAR_REPEATS times.
+ */
+#define ALARM_REPEAT_MS       15000u
+#define ALARM_CLEAR_REPEATS   3u
+#define ALARM_CLEAR_PERIOD_MS 5000u
+
+__attribute__((noinline)) void Motor_AlarmTick(uint32_t now)
+{
+	uint8_t alarmBefore = sysInfo.isAlarmOccurred;
+
+	if (Motor_CurrentAlarmDue(now)) {
+		sysInfo.alarmCode = ALARM_LOW_CURRENT;
+		sysInfo.alarmTime = sysInfo.currentTime;
+		sysInfo.clearRepeatsLeft = 0;
+		MotorHistory_Record(HIST_ALARM,HIST_SLAVE,sysInfo.powerState,sysInfo.powerState,
+			HIST_ERROR_LOW_CURRENT,HIST_WARNING);
+		Motor_SendAlarm(ALARM_LOW_CURRENT, sysInfo.alarmTime);
+	}
+	else if (alarmBefore && !sysInfo.isAlarmOccurred) {
+		MotorHistory_Record(HIST_CLEAR,HIST_SLAVE,sysInfo.powerState,sysInfo.powerState,
+			HIST_ERROR_LOW_CURRENT,HIST_APPLIED);
+		sysInfo.alarmCode = ALARM_NONE;
+		sysInfo.clearRepeatsLeft = ALARM_CLEAR_REPEATS - 1;
+		sysInfo.lastClearTick = now;
+		Motor_SendAlarm(ALARM_CLEARED, sysInfo.alarmTime);
+	}
+	else if (sysInfo.isAlarmOccurred) {
+		if ((uint32_t)(now - sysInfo.lastAlarmTick) > pdMS_TO_TICKS(ALARM_REPEAT_MS)) {
+			sysInfo.lastAlarmTick = now;
+			Motor_SendAlarm(sysInfo.alarmCode, sysInfo.alarmTime);
+		}
+	}
+	else if (sysInfo.clearRepeatsLeft &&
+		(uint32_t)(now - sysInfo.lastClearTick) >= pdMS_TO_TICKS(ALARM_CLEAR_PERIOD_MS)) {
+		sysInfo.clearRepeatsLeft--;
+		sysInfo.lastClearTick = now;
+		Motor_SendAlarm(ALARM_CLEARED, sysInfo.alarmTime);
+	}
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
@@ -787,25 +832,7 @@ void StartSystemTask(void *argument)
 			{
                 Motor_SetPower(MOTOR_POWER_OFF,HIST_TIMER);
 			}
-            uint8_t alarmBefore=sysInfo.isAlarmOccurred;
-			if (Motor_CurrentAlarmDue(xTaskGetTickCount())) {
-                MotorHistory_Record(HIST_ALARM,HIST_SLAVE,sysInfo.powerState,sysInfo.powerState,
-                    HIST_ERROR_LOW_CURRENT,HIST_WARNING);
-				Motor_SendCurrentAlarm();
-			}
-            else if (alarmBefore && !sysInfo.isAlarmOccurred)
-                MotorHistory_Record(HIST_CLEAR,HIST_SLAVE,sysInfo.powerState,sysInfo.powerState,
-                    HIST_ERROR_LOW_CURRENT,HIST_APPLIED);
-			
-			if (sysInfo.isAlarmOccurred == TRUE) 
-			{
-				if (xTaskGetTickCount() - sysInfo.lastAlarmTick > pdMS_TO_TICKS(15000)) 
-				{
-					sysInfo.lastAlarmTick = xTaskGetTickCount();
-					
-					Motor_SendCurrentAlarm();
-				}
-			}
+			Motor_AlarmTick(xTaskGetTickCount());
 			
 		}
 		else if (sysInfo.sysState == SYSSTATE_CONFIGURATION) {

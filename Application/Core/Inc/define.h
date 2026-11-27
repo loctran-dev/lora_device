@@ -13,11 +13,14 @@
 #define R_SHUNT 50.0f
 #define V_OFFSET 1.65f
 
+/* CMD_ALARM_MESSAGE alarmCode; the remote's Alarm_Name_e uses the same values (remote KI-17/KI-23). */
 typedef enum {
 	ALARM_NONE,
 	ALARM_LOST_INPUT_POWER,
 	ALARM_LOST_MOTOR_POWER,
 	ALARM_DIFF_MOTOR_CURRENT_PHASE,
+	ALARM_LOW_CURRENT,          /* a phase current below the threshold for the alarm delay */
+	ALARM_CLEARED = 0x80,       /* the alarm of the module ended; never sent as code 0 */
 } AlarmName_t;
 
 typedef enum  {
@@ -64,9 +67,11 @@ typedef struct {
 	RTC_DateTypeDef rtcDate;
 	
 	uint8_t isAlarmOccurred;
-	uint8_t alarmCode;
-	uint32_t alarmTime;
+	uint8_t alarmCode;          /* AlarmName_t of the active alarm */
+	uint32_t alarmTime;         /* device time the alarm started; sent in every repeat */
 	uint32_t lastAlarmTick;
+	uint8_t clearRepeatsLeft;   /* ALARM_CLEARED messages still to send */
+	uint32_t lastClearTick;
 	uint32_t lastCommTick;
 	uint16_t autoStatusSeconds;
 	uint32_t lastStatusTxTick;

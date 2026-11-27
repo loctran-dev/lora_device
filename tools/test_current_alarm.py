@@ -98,5 +98,96 @@ class CurrentAlarmTests(harness.FirmwareHarness):
         self.assertEqual(self.due((baseline + 2000) & 0xFFFFFFFF), 1)
 
 
+LOW_CURRENT, CLEARED, CMD_ALARM = 4, 0x80, 0x07       # ALARM_LOW_CURRENT, ALARM_CLEARED, opcode
+
+
+class AlarmMessageTests(CurrentAlarmTests.__base__):
+    """CMD_ALARM_MESSAGE sent by Motor_AlarmTick (remote KI-17/KI-23)."""
+
+    def setUp(self):
+        super().setUp()
+        from unicorn import UC_HOOK_CODE
+        from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_PC, UC_ARM_REG_LR
+        self.messages, self.history = [], []
+
+        def queue(cpu, address, size, data):
+            packet = bytes(cpu.mem_read(cpu.reg_read(UC_ARM_REG_R1), 270))
+            wire = packet[14:14 + int.from_bytes(packet[10:14], "little")]
+            self.assertEqual(wire[8], CMD_ALARM)
+            self.messages.append(struct.unpack("<BBI", wire[9:15]))   # module, code, start time
+            cpu.reg_write(UC_ARM_REG_R0, 0)
+            cpu.reg_write(UC_ARM_REG_PC, cpu.reg_read(UC_ARM_REG_LR))
+
+        def record(cpu, address, size, data):
+            self.history.append(cpu.reg_read(UC_ARM_REG_R0))
+            cpu.reg_write(UC_ARM_REG_PC, cpu.reg_read(UC_ARM_REG_LR))
+        for name, callback in [("osMessageQueuePut", queue), ("MotorHistory_Record", record)]:
+            address = harness.symbol(name)[0] & ~1
+            self.cpu.hook_add(UC_HOOK_CODE, callback, begin=address, end=address)
+        self.set("powerState", 1)
+        self.set("alarmThresholdCentiAmp", 100, 2)
+        self.set("alarmDelaySeconds", 0, 2)
+        self.low(True)
+
+    def low(self, low):
+        value = 0.5 if low else 2.0
+        self.cpu.mem_write(self.base + harness.member("phaseCurrent"), struct.pack("<3f", value, 2.0, 2.0))
+
+    def tick(self, now, device_time=None):
+        if device_time is not None:
+            self.set("currentTime", device_time, 4)
+        before = len(self.messages)
+        self.call("Motor_AlarmTick", now)
+        self.sent_at += [now] * (len(self.messages) - before)
+
+    sent_at = None
+
+    def run(self, result=None):
+        self.sent_at = []
+        return super().run(result)
+
+    def test_alarm_carries_its_code_and_start_time_in_every_repeat(self):
+        self.tick(1000, device_time=1800000000)
+        self.tick(16001, device_time=1800000015)
+        self.tick(31002, device_time=1800000030)
+        self.assertEqual(self.messages, [(0, LOW_CURRENT, 1800000000)] * 3)
+        self.assertEqual(self.get("alarmCode"), LOW_CURRENT)
+
+    def test_repeat_period_stays_well_below_the_remote_fallback(self):
+        for now in range(1000, 77000, 1000):                            # the remote's 75 s fallback window
+            self.tick(now)
+        gaps = [b - a for a, b in zip(self.sent_at, self.sent_at[1:])]
+        self.assertEqual(self.sent_at[0], 1000)
+        self.assertGreaterEqual(len(gaps), 4)
+        self.assertTrue(all(gap <= 16000 for gap in gaps), gaps)
+
+    def test_clear_is_sent_three_times_a_few_seconds_apart(self):
+        self.tick(1000, device_time=1800000000)
+        self.low(False)
+        for now in range(2000, 30000, 500):
+            self.tick(now)
+        self.assertEqual(self.messages[1:], [(0, CLEARED, 1800000000)] * 3)
+        self.assertEqual(self.sent_at, [1000, 2000, 7000, 12000])
+        self.assertEqual(self.get("alarmCode"), 0)
+        self.assertEqual(len(self.history), 2)                          # one ALARM and one CLEAR record
+
+    def test_motor_off_also_sends_the_clear(self):
+        self.tick(1000)
+        self.set("powerState", 2)
+        self.tick(2000)
+        self.assertEqual(self.messages[-1][1], CLEARED)
+
+    def test_alarm_back_during_the_clear_repeats_stops_them(self):
+        self.tick(1000)
+        self.low(False)
+        self.tick(2000)                                                 # first CLEARED
+        self.low(True)
+        self.tick(3000, device_time=1800000100)                        # alarm again
+        for now in range(4000, 15000, 1000):
+            self.tick(now)
+        self.assertEqual([m[1] for m in self.messages], [LOW_CURRENT, CLEARED, LOW_CURRENT])
+        self.assertEqual(self.messages[-1][2], 1800000100)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

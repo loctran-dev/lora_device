@@ -54,6 +54,7 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 uint8_t Motor_CurrentAlarmDue(uint32_t now);
+void Motor_AlarmTick(uint32_t now);
 void setRTC_dateTime(RTC_TimeTypeDef sTime, RTC_DateTypeDef sDate);
 void ADC_endConversionIRQHandler(void);
 /* USER CODE END EFP */
