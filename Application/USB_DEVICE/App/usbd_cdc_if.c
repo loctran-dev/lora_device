@@ -344,6 +344,37 @@ syntax:
   replyLength = sprintf((char*)UserTxBufferFS, "ERR BTN BTN1|BTN2 CLICK|LONG\n");
 }
 
+/*
+ * Bench simulation of the motor currents (the bench slave has no motor):
+ *   "SIM ON <a> <b> <c>"  phase currents in mA while the motor is ON
+ *   "SIM OFF"             back to the ADC
+ *   "SIM"                 show the state
+ * Not stored; a reset turns it off.
+ */
+static int MotorUSB_Simulate(uint16_t length)
+{
+  char command[64];
+  unsigned a, b, c;
+  if (length >= sizeof(command) || UserRxBufferFS[length - 1] != '\n')
+    return sprintf((char*)UserTxBufferFS, "ERR SIM one line required\n");
+  memcpy(command, UserRxBufferFS, length);
+  command[length] = '\0';
+  if (sscanf(command, "SIM ON %u %u %u", &a, &b, &c) == 3 && a <= 65535 && b <= 65535 && c <= 65535)
+  {
+    sysInfo.simMilliAmp[0] = a;
+    sysInfo.simMilliAmp[1] = b;
+    sysInfo.simMilliAmp[2] = c;
+    sysInfo.simActive = 1;
+  }
+  else if (!strncmp(command, "SIM OFF", 7))
+    sysInfo.simActive = 0;
+  else if (strncmp(command, "SIM\n", 4) && strncmp(command, "SIM\r", 4))
+    return sprintf((char*)UserTxBufferFS, "ERR SIM ON <mA> <mA> <mA>|OFF\n");
+  return sprintf((char*)UserTxBufferFS, "SIM ACTIVE=%u A_MA=%u B_MA=%u C_MA=%u PWR=%u ALARM=%u CODE=%u CLEAR_LEFT=%u\n",
+    sysInfo.simActive, sysInfo.simMilliAmp[0], sysInfo.simMilliAmp[1], sysInfo.simMilliAmp[2],
+    sysInfo.powerState, sysInfo.isAlarmOccurred, sysInfo.alarmCode, sysInfo.clearRepeatsLeft);
+}
+
 void MotorUSB_Process(void)
 {
   USBD_CDC_HandleTypeDef *cdc = hUsbDeviceFS.pClassData;
@@ -391,6 +422,8 @@ void MotorUSB_Process(void)
     replyLength = sprintf((char*)UserTxBufferFS, "PONG MOTOR\n");
   else if (length >= 4 && memcmp(UserRxBufferFS, "BTN ", 4) == 0)
     MotorUSB_Button(length);
+  else if (length >= 4 && memcmp(UserRxBufferFS, "SIM", 3) == 0)
+    replyLength = MotorUSB_Simulate(length);
   else if (length == 5 && memcmp(UserRxBufferFS, "MODE\n", 5) == 0)
     replyLength = sprintf((char*)UserTxBufferFS, "MODE=%u NET=%u NODE=%u I=%u D=%u F=%u SF=%u A=%u\n",
       sysInfo.sysState, sysInfo.netId, sysInfo.nodeId, sysInfo.alarmThresholdCentiAmp,

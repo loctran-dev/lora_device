@@ -98,6 +98,26 @@ class CurrentAlarmTests(harness.FirmwareHarness):
         self.assertEqual(self.due((baseline + 2000) & 0xFFFFFFFF), 1)
 
 
+class SimulatedCurrentTests(harness.FirmwareHarness):
+    """Bench simulation (USB SIM): currents only while the motor is ON."""
+
+    def currents(self):
+        return struct.unpack("<3f", bytes(self.cpu.mem_read(self.base + harness.member("phaseCurrent"), 12)))
+
+    def test_simulated_motor_draws_current_only_while_on(self):
+        self.cpu.mem_write(self.base + harness.member("phaseCurrent"), struct.pack("<3f", 9.0, 9.0, 9.0))
+        self.call("Motor_ApplySimulatedCurrents")
+        self.assertEqual(self.currents(), (9.0, 9.0, 9.0))               # inactive: ADC values kept
+        self.set("simActive", 1)
+        self.cpu.mem_write(self.base + harness.member("simMilliAmp"), struct.pack("<3H", 5000, 250, 4000))
+        self.set("powerState", 1)
+        self.call("Motor_ApplySimulatedCurrents")
+        self.assertEqual([round(v, 3) for v in self.currents()], [5.0, 0.25, 4.0])
+        self.set("powerState", 2)
+        self.call("Motor_ApplySimulatedCurrents")
+        self.assertEqual(self.currents(), (0.0, 0.0, 0.0))
+
+
 LOW_CURRENT, CLEARED, CMD_ALARM = 4, 0x80, 0x07       # ALARM_LOW_CURRENT, ALARM_CLEARED, opcode
 
 

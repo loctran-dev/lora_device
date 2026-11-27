@@ -179,7 +179,7 @@ int main(void)
 	sysInfo.nodeIdConfig = 0x01;
 	sysInfo.frequencyConfig = 433;
 	sysInfo.sfConfig = SF_7;
-	sysInfo.autoStatusSeconds = 60;
+	sysInfo.autoStatusSeconds = AUTO_STATUS_DEFAULT_SECONDS;
 	CmdHandler_MotorConfig_Load();
     sysInfo.powerState=MOTOR_POWER_OFF;
     MotorHistory_Init();
@@ -760,6 +760,19 @@ void ADC_endConversionIRQHandler(void)
 	sysInfo.phaseCurrent[0] = sqrt(sumSqrt[0]) * ADC2CurrentConst;
 	sysInfo.phaseCurrent[1] = sqrt(sumSqrt[1]) * ADC2CurrentConst;
 	sysInfo.phaseCurrent[2] = sqrt(sumSqrt[2]) * ADC2CurrentConst;
+	Motor_ApplySimulatedCurrents();
+}
+
+/* Bench simulation: a motor draws the set currents while ON and nothing while OFF. */
+__attribute__((noinline)) void Motor_ApplySimulatedCurrents(void)
+{
+	if (!sysInfo.simActive) {
+		return;
+	}
+	for (int phase = 0; phase < 3; phase++) {
+		sysInfo.phaseCurrent[phase] = sysInfo.powerState == MOTOR_POWER_ON ?
+			sysInfo.simMilliAmp[phase] * 0.001f : 0.0f;
+	}
 }
 
 

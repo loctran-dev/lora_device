@@ -58,7 +58,7 @@ void CmdHandler_MotorConfig_Load(void)
         sysInfo.netIdConfig = p[2];
         sysInfo.nodeIdConfig = p[2] >> 8;
         sysInfo.sfConfig = p[2] >> 16;
-        sysInfo.autoStatusSeconds = p[3] <= 255 ? 60 : (p[3] >> 8) & 0xFFFF;
+        sysInfo.autoStatusSeconds = p[3] <= 255 ? AUTO_STATUS_DEFAULT_SECONDS : (p[3] >> 8) & 0xFFFF;
     }
 }
 
@@ -427,11 +427,11 @@ static void handleConfigConnection(LoraPackage_t fwPackage) {
 			sysInfo.frequencyConfig = payloadRequest.frequency;
 			sysInfo.sfConfig = payloadRequest.sf;
 			/* Pairing starts the motor from the default settings, as the remote
-			   does for its copy (threshold, delay and auto-status 0). Saved in
+			   does for its copy (threshold and delay 0, auto status 15 s). Saved in
 			   the same record write as the new radio settings. */
 			sysInfo.alarmThresholdCentiAmp = 0;
 			sysInfo.alarmDelaySeconds = 0;
-			sysInfo.autoStatusSeconds = 0;
+			sysInfo.autoStatusSeconds = AUTO_STATUS_DEFAULT_SECONDS;
 			result = saveMotorConfig();
 			if (!result) {
 				sysInfo.netIdConfig = oldNet;

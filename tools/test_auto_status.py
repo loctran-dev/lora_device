@@ -104,7 +104,7 @@ class AutoStatusTests(harness.FirmwareHarness):
         legacy = prefix + struct.pack("<II", (-sum(prefix)) & 255, 0x31474643)
         self.cpu.mem_write(0x0800FC00, legacy)
         self.call("CmdHandler_MotorConfig_Load")
-        self.assertEqual(self.get("autoStatusSeconds", 2), 60)
+        self.assertEqual(self.get("autoStatusSeconds", 2), 15)
         self.set("autoStatusSeconds", 3, 2)
         self.assertEqual(self.call("saveMotorConfig"), 1)
         self.assertEqual(bytes(self.cpu.mem_read(0x0800FC00, 20)), legacy)

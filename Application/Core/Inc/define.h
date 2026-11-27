@@ -13,6 +13,10 @@
 #define R_SHUNT 50.0f
 #define V_OFFSET 1.65f
 
+/* Default auto-status period [s]: boot without a record, records older than the
+   field, and every accepted pairing (the remote uses the same default). */
+#define AUTO_STATUS_DEFAULT_SECONDS 15u
+
 /* CMD_ALARM_MESSAGE alarmCode; the remote's Alarm_Name_e uses the same values (remote KI-17/KI-23). */
 typedef enum {
 	ALARM_NONE,
@@ -72,6 +76,9 @@ typedef struct {
 	uint32_t lastAlarmTick;
 	uint8_t clearRepeatsLeft;   /* ALARM_CLEARED messages still to send */
 	uint32_t lastClearTick;
+	/* Bench simulation (USB "SIM"): the bench slave has no motor. Not stored. */
+	uint8_t simActive;          /* phase currents come from simMilliAmp while ON */
+	uint16_t simMilliAmp[3];
 	uint32_t lastCommTick;
 	uint16_t autoStatusSeconds;
 	uint32_t lastStatusTxTick;

@@ -220,11 +220,11 @@ class PersistenceTests(FirmwareHarness):
         # Pairing starts from the defaults on both sides (remote KI-10).
         self.motor_settings(1234, 30, 2)
         self.assertEqual(self.connection_request(), 1)
-        self.assert_motor_settings(0, 0, 0)
+        self.assert_motor_settings(0, 0, 15)               # auto status default 15 s
         self.defaults()
-        self.motor_settings(77, 77, 77)                    # only the flash record can bring back 0
+        self.motor_settings(77, 77, 77)                    # only the flash record can bring these back
         self.call("CmdHandler_MotorConfig_Load")
-        self.assert_motor_settings(0, 0, 0)
+        self.assert_motor_settings(0, 0, 15)
         self.assertEqual(self.get("nodeIdConfig"), 3)
 
     def test_pairing_flash_failure_keeps_motor_settings(self):
