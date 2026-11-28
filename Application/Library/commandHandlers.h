@@ -12,6 +12,6 @@ typedef struct {
     CmdHandler_t handler;
 } CmdMapping_t;
 
-extern const CmdMapping_t cmdTable[10];
+extern const CmdMapping_t cmdTable[]; /* ends with {0, NULL} */
 
 #endif

@@ -23,6 +23,7 @@ static void handleSyncTime(LoraPackage_t packet);
 static void handleGetFactoryInfo(LoraPackage_t packet);
 static void handleConfigConnection(LoraPackage_t packet);
 static void handleAlarmMessage(LoraPackage_t packet);
+static void handleUnpair(LoraPackage_t packet);
 static uint8_t syncStatusTime(uint32_t timestamp);
 
 static uint8_t sendResponse(LoraPackage_t *packet, void *payload, uint8_t size)
@@ -115,6 +116,7 @@ const CmdMapping_t cmdTable[] = {
 	{CMD_GET_FACTORY_INFO, handleGetFactoryInfo},
 	{CMD_CONFIG_CONNECTION, handleConfigConnection},
 	{CMD_ALARM_MESSAGE, handleAlarmMessage},
+	{CMD_UNPAIR, handleUnpair},
 	{0, NULL} 
 };
 
@@ -456,6 +458,31 @@ static void handleConfigConnection(LoraPackage_t fwPackage) {
 	payload.serial = factoryInfo.serial;
 	sendResponse(&fwPackage, &payload, sizeof(payload));
 
+}
+
+/*
+ * The remote deleted this device (remote KI-27): acknowledge, switch the motor
+ * off and, once the reply is out, go to configuration mode like a long CONFIG
+ * press (StartSystemTask). Only the paired address is obeyed, never broadcast.
+ * Not stored: after a reboot the slave uses its saved address again, which the
+ * remote does not hand out to another device while it has other ids.
+ */
+static void handleUnpair(LoraPackage_t fwPackage)
+{
+	PayloadCommonResponse_t payload;
+
+	if (fwPackage.netId != sysInfo.netId || fwPackage.nodeId != sysInfo.nodeId ||
+			fwPackage.code != CMD_UNPAIR || fwPackage.type != LORA_PACKAGE_TYPE_REQUEST ||
+			sysInfo.sysState != SYSSTATE_RUNNING || sysInfo.unpairTick) {
+		return;
+	}
+	payload.moduleIndex = 0;
+	payload.result = TRUE;
+	sendResponse(&fwPackage, &payload, sizeof(payload));
+	if (sysInfo.powerState == MOTOR_POWER_ON) {
+		Motor_SetPower(MOTOR_POWER_OFF, HIST_REMOTE);
+	}
+	sysInfo.unpairTick = xTaskGetTickCount() | 1u;
 }
 
 static void handleAlarmMessage(LoraPackage_t fwPackage)

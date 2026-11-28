@@ -18,6 +18,7 @@
 #define CMD_CONFIG_CONNECTION 0x06
 #define CMD_ALARM_MESSAGE 0x07
 #define CMD_SET_CONFIG 0x08
+#define CMD_UNPAIR 0x0A /* deleted on the remote: leave the network (remote KI-27; 0x09 is CMD_HISTORY) */
 
 /* Wire units: 0.01 A and seconds. Single-motor slave supports module 0. */
 #pragma pack(1)

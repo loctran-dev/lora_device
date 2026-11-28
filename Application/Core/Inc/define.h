@@ -76,6 +76,7 @@ typedef struct {
 	uint32_t lastAlarmTick;
 	uint8_t clearRepeatsLeft;   /* ALARM_CLEARED messages still to send */
 	uint32_t lastClearTick;
+	uint32_t unpairTick;        /* CMD_UNPAIR accepted at this tick (0 = none): configuration mode follows */
 	/* Bench simulation (USB "SIM"): the bench slave has no motor. Not stored. */
 	uint8_t simActive;          /* phase currents come from simMilliAmp while ON */
 	uint16_t simMilliAmp[3];

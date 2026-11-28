@@ -799,6 +799,11 @@ void StartSystemTask(void *argument)
 		HAL_RTC_GetDate(&hrtc, &sysInfo.rtcDate, RTC_FORMAT_BIN);
 		sysInfo.currentTime = getUnixTimestamp(&sysInfo.rtcTime, &sysInfo.rtcDate);
 		
+		/* CMD_UNPAIR (remote KI-27): configuration mode 500 ms later, after the reply was sent. */
+		if (sysInfo.unpairTick && (uint32_t)(xTaskGetTickCount() - sysInfo.unpairTick) >= pdMS_TO_TICKS(500)) {
+			sysInfo.unpairTick = 0;
+			configButton.isLongPressed = TRUE;
+		}
 		if (configButton.isLongPressed == TRUE) {
 			configButton.isLongPressed = FALSE;
 			
